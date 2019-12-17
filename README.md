@@ -1,4 +1,4 @@
-# (Don't fear the) nodereaper
+# (Don't fear the) nodereaper [![GoDoc](https://godoc.org/github.com/wish/nodereaper?status.svg)](https://godoc.org/github.com/wish/nodereaper) [![Go Report Card](https://goreportcard.com/badge/github.com/wish/nodereaper)](https://goreportcard.com/report/github.com/wish/nodereaper)  [![Docker Repository on Quay](https://quay.io/repository/wish/nodereaper/status "Docker Repository on Quay")](https://quay.io/repository/wish/nodereaper)
 
 Configurable controller & daemonset for gracefully terminating nodes.
 
