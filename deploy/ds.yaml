@@ -1,0 +1,49 @@
+---
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  labels:
+    app: nodereaperd
+  name: nodereaperd
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: nodereaperd
+  template:
+    metadata:
+      labels:
+        app: nodereaperd
+    spec:
+      containers:
+      - command:
+        - /root/nodereaperd
+        env:
+        - name: FORCE_DELETION_LABEL
+          value: nodereaper.wish.com/force-delete
+        - name: LOG_LEVEL
+          value: trace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        image: quay.io/wish/nodereaper:v0.1.0
+        imagePullPolicy: Always
+        name: nodereaperd
+        securityContext:
+          privileged: true
+      hostPID: true
+      restartPolicy: Always
+      serviceAccountName: nodereaperd
+      tolerations:
+      - effect: NoSchedule
+        key: node-role.kubernetes.io/master
+        operator: Exists
+      - effect: NoExecute
+        key: NodereaperDeletingNode
+        operator: Exists
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 5
+    type: RollingUpdate

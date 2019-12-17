@@ -1,0 +1,78 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: nodereaper
+  name: nodereaper
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nodereaper
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: nodereaper
+    spec:
+      containers:
+      - command:
+        - /root/nodereaper
+        env:
+        - name: NAMESPACE
+          value: kube-system
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: spec.nodeName
+        - name: AWS_REGION
+          value: us-west-1
+        - name: AWS_ASG_FILTER
+          value: KubernetesCluster=mycluster.k8s.example.com
+        - name: AWS_ASG_NAME_TAG
+          value: k8s.io/cluster-autoscaler/node-template/label/kops.k8s.io/instancegroup
+        - name: REQUEST_DELETION_LABEL
+          value: nodereaper.wish.com/request-delete
+        - name: FORCE_DELETION_LABEL
+          value: nodereaper.wish.com/force-delete
+        - name: INSTANCE_GROUP_LABEL
+          value: kops.k8s.io/instancegroup
+        - name: LOG_LEVEL
+          value: debug
+        image: quay.io/wish/nodereaper:v0.1.0
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 9656
+            scheme: HTTP
+        name: nodereaper
+        ports:
+        - containerPort: 9656
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /etc/config
+          name: cmap
+      restartPolicy: Always
+      serviceAccountName: nodereaper
+      volumes:
+      - configMap:
+          name: nodereaper-config
+        name: cmap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nodereaper-config
+  namespace: kube-system
+data:
+  global.maxSurge: "1"
+  global.maxUnavailable: "0"
+  global.startupGracePeriod: "2m"
+  global.ignoreSelector: "kubernetes.io/role=master"
