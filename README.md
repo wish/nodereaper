@@ -77,6 +77,7 @@ The `nodereaperd` daemonset requires no IAM permissions. The `nodereaper` contro
 - `autoscaling:DescribeAutoScalingGroups`
 - `autoscaling:DetachInstances`
 - `ec2:ModifyInstanceAttribute`
+- `ec2:DescribeLaunchTemplates`
 
 The needed k8s RBAC permissions can be found in the `deploy` folder.
 

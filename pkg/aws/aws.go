@@ -55,7 +55,7 @@ func (d *APIProvider) Run(stopCh <-chan struct{}) {
 // Sync queries the AWS API to fetch the asgs and instances in the cluster
 func (d *APIProvider) sync() {
 	logrus.Tracef("Syncing AWS cache")
-	newAsgs, err := getAsgs(d.client, d.filters, d.nameTag)
+	newAsgs, err := getAsgs(d.client, d.ec2Client, d.filters, d.nameTag)
 	if err != nil {
 		logrus.Errorf("Could not update AWS ASG cache: %v", err)
 		return
@@ -66,7 +66,12 @@ func (d *APIProvider) sync() {
 	for _, asg := range newAsgs {
 		for _, instance := range asg.Instances {
 			if instance.InstanceId != nil {
-				d.nodeInstanceConfiguration[*instance.InstanceId] = instance.LaunchConfigurationName
+				if instance.LaunchConfigurationName != nil {
+					d.nodeInstanceConfiguration[*instance.InstanceId] = instance.LaunchConfigurationName
+				} else if instance.LaunchTemplate != nil {
+					launchTemplate := fmt.Sprintf("%v-%v", *instance.LaunchTemplate.LaunchTemplateId, *instance.LaunchTemplate.Version)
+					d.nodeInstanceConfiguration[*instance.InstanceId] = &launchTemplate
+				}
 			}
 		}
 	}
@@ -100,9 +105,7 @@ func (d *APIProvider) OutdatedLaunchConfig(opts *config.Ops, node *core_v1.Node)
 	groupLaunchConfig := ""
 	for _, group := range d.asgCache {
 		if node.Labels[opts.InstanceGroupLabel] == group.Name {
-			if group.LaunchConfigurationName != nil {
-				groupLaunchConfig = *group.LaunchConfigurationName
-			}
+			groupLaunchConfig = group.LaunchVersion
 			break
 		}
 	}
@@ -215,10 +218,13 @@ type asg struct {
 	Name           string
 	Tags           map[string]string
 	InstanceStatus map[string]int
+
+	// Custom string to determine if launch config or launch template matches expectations
+	LaunchVersion string
 }
 
 // GetAsgs gets the AutoScalingGroups that match the given filters
-func getAsgs(svc *autoscaling.AutoScaling, filter map[string]string, nametag string) ([]*asg, error) {
+func getAsgs(svc *autoscaling.AutoScaling, svcEC2 *ec2.EC2, filter map[string]string, nametag string) ([]*asg, error) {
 
 	input := &autoscaling.DescribeAutoScalingGroupsInput{}
 	groups := []*asg{}
@@ -256,6 +262,54 @@ func getAsgs(svc *autoscaling.AutoScaling, filter map[string]string, nametag str
 		return nil, err
 	}
 
+	launchTempIds := []*string{}
+	for _, group := range groups {
+		if group.MixedInstancesPolicy != nil && group.MixedInstancesPolicy.LaunchTemplate != nil {
+			launchTempIds = append(launchTempIds, group.MixedInstancesPolicy.LaunchTemplate.LaunchTemplateSpecification.LaunchTemplateId)
+		}
+		if group.LaunchTemplate != nil {
+			launchTempIds = append(launchTempIds, group.LaunchTemplate.LaunchTemplateId)
+		}
+	}
+
+	canonicalLaunchTemps := make(map[string]string)
+	if len(launchTempIds) > 0 {
+		err = svcEC2.DescribeLaunchTemplatesPages(&ec2.DescribeLaunchTemplatesInput{
+			LaunchTemplateIds: launchTempIds,
+		}, func(page *ec2.DescribeLaunchTemplatesOutput, lastPage bool) bool {
+			for _, launchTemplate := range page.LaunchTemplates {
+				if launchTemplate.LaunchTemplateId == nil {
+					return false
+				}
+				if launchTemplate.DefaultVersionNumber == nil {
+					return false
+				}
+
+				id := *launchTemplate.LaunchTemplateId
+				canonicalLaunchTemps[id] = fmt.Sprintf("%v-%v", id, *launchTemplate.DefaultVersionNumber)
+			}
+			return true
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	for _, group := range groups {
+		if group.LaunchConfigurationName != nil {
+			group.LaunchVersion = *group.LaunchConfigurationName
+			continue
+		}
+		if group.MixedInstancesPolicy != nil && group.MixedInstancesPolicy.LaunchTemplate != nil {
+			group.LaunchVersion = canonicalLaunchTemps[*group.MixedInstancesPolicy.LaunchTemplate.LaunchTemplateSpecification.LaunchTemplateId]
+			continue
+		}
+		if group.LaunchTemplate != nil {
+			group.LaunchVersion = canonicalLaunchTemps[*group.LaunchTemplate.LaunchTemplateId]
+			continue
+		}
+	}
+
 	return groups, nil
 }
 
@@ -265,6 +319,7 @@ func convertGroup(g *autoscaling.Group) (*asg, error) {
 		*g.AutoScalingGroupName,
 		make(map[string]string),
 		make(map[string]int),
+		"",
 	}
 	for _, tag := range g.Tags {
 		a.Tags[*tag.Key] = *tag.Value
