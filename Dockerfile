@@ -1,4 +1,8 @@
-FROM golang:1.12
+FROM --platform=$BUILDPLATFORM golang:1.12
+
+ARG BUILDPLATFORM
+ARG TARGETARCH
+ARG TARGETOS
 
 ENV GO111MODULE=on
 WORKDIR /go/src/github.com/wish/nodereaper
@@ -11,10 +15,10 @@ RUN go mod download
 COPY . /go/src/github.com/wish/nodereaper/
 
 # Build controller
-RUN CGO_ENABLED=0 GOOS=linux go build -o ./nodereaper/nodereaper -a -installsuffix cgo ./nodereaper
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} GOOS=${TARGETOS} go build -o ./nodereaper/nodereaper -a -installsuffix cgo ./nodereaper
 
 # Build daemon
-RUN CGO_ENABLED=0 GOOS=linux go build -o ./nodereaperd/nodereaperd -a -installsuffix cgo ./nodereaperd
+RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} GOOS=${TARGETOS} go build -o ./nodereaperd/nodereaperd -a -installsuffix cgo ./nodereaperd
 
 FROM alpine:3.7
 RUN apk --no-cache add ca-certificates
