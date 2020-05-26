@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/wait"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/ec2"
@@ -75,6 +76,12 @@ func (d *APIProvider) sync() {
 			}
 		}
 	}
+
+	detachedInstances := getDetachedInstances(d.ec2Client, d.filters)
+	for _, detachedInstance := range detachedInstances {
+		d.nodeInstanceConfiguration[*detachedInstance.InstanceId] = &detachedInstance.LaunchVersion
+	}
+
 	d.cacheMu.Unlock()
 	logrus.Tracef("Finished syncing AWS cache")
 }
@@ -333,4 +340,71 @@ func convertGroup(g *autoscaling.Group) (*asg, error) {
 		}
 	}
 	return a, nil
+}
+
+type detachedInstance struct {
+	ec2.Instance
+	Tags          map[string]string
+	LaunchVersion string
+}
+
+func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*detachedInstance {
+	detachedInstances := []*detachedInstance{}
+	input := &ec2.DescribeInstancesInput{
+		Filters: []*ec2.Filter{},
+	}
+
+	for fkey, fvalue := range filter {
+		input.Filters = append(input.Filters, &ec2.Filter{
+			Name: aws.String(fmt.Sprintf("tag:%s", fkey)),
+			Values: []*string{
+				&fvalue,
+			},
+		})
+	}
+
+	svcEC2.DescribeInstancesPages(input,
+		func(page *ec2.DescribeInstancesOutput, lastPage bool) bool {
+			for _, res := range page.Reservations {
+				for _, instance := range res.Instances {
+					updatedInstance, err := convertInstance(instance)
+					if err != nil {
+						logrus.Errorf("%s", err.Error)
+						return false
+					} else {
+						// Check that it's not attached to an asg
+						if _, ok := updatedInstance.Tags["aws:autoscaling:groupName"]; !ok {
+							detachedInstances = append(detachedInstances, updatedInstance)
+						}
+					}
+				}
+			}
+			return true
+		})
+	return detachedInstances
+}
+
+func convertInstance(instance *ec2.Instance) (*detachedInstance, error) {
+	detachedInstance := &detachedInstance{
+		*instance,
+		make(map[string]string),
+		"",
+	}
+	var launchTemplateId *string
+	var launchTemplateVersion *string
+	for _, tag := range instance.Tags {
+		detachedInstance.Tags[*tag.Key] = *tag.Value
+		if *tag.Key == "aws:ec2launchtemplate:id" {
+			launchTemplateId = tag.Value
+		} else if *tag.Key == "aws:ec2launchtemplate:version" {
+			launchTemplateVersion = tag.Value
+		}
+	}
+	if launchTemplateId != nil && launchTemplateVersion != nil {
+		launchTemplate := fmt.Sprintf("%v-%v", *launchTemplateId, *launchTemplateVersion)
+		detachedInstance.LaunchVersion = launchTemplate
+	} else {
+		return nil, fmt.Errorf("Could not find launch template for instance: %s", *instance.InstanceId)
+	}
+	return detachedInstance, nil
 }
