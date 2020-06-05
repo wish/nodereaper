@@ -79,7 +79,8 @@ func (d *APIProvider) sync() {
 
 	detachedInstances := getDetachedInstances(d.ec2Client, d.filters)
 	for _, detachedInstance := range detachedInstances {
-		d.nodeInstanceConfiguration[*detachedInstance.InstanceId] = &detachedInstance.LaunchVersion
+		//Delete all detached instances
+		d.nodeInstanceConfiguration[*detachedInstance.InstanceId] = nil
 	}
 
 	d.cacheMu.Unlock()
@@ -342,14 +343,8 @@ func convertGroup(g *autoscaling.Group) (*asg, error) {
 	return a, nil
 }
 
-type detachedInstance struct {
-	ec2.Instance
-	Tags          map[string]string
-	LaunchVersion string
-}
-
-func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*detachedInstance {
-	detachedInstances := []*detachedInstance{}
+func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*ec2.Instance {
+	detachedInstances := []*ec2.Instance{}
 	input := &ec2.DescribeInstancesInput{
 		Filters: []*ec2.Filter{},
 	}
@@ -367,14 +362,11 @@ func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*detached
 		func(page *ec2.DescribeInstancesOutput, lastPage bool) bool {
 			for _, res := range page.Reservations {
 				for _, instance := range res.Instances {
-					updatedInstance, err := convertInstance(instance)
-					if err != nil {
-						logrus.Errorf("%s", err.Error)
-						return false
-					} else {
-						// Check that it's not attached to an asg
-						if _, ok := updatedInstance.Tags["aws:autoscaling:groupName"]; !ok {
-							detachedInstances = append(detachedInstances, updatedInstance)
+					// Check that it's not attached to an asg
+					for _, tag := range instance.Tags {
+						if *tag.Key == "aws:autoscaling:groupName" {
+							detachedInstances = append(detachedInstances, instance)
+							break
 						}
 					}
 				}
@@ -382,29 +374,4 @@ func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*detached
 			return true
 		})
 	return detachedInstances
-}
-
-func convertInstance(instance *ec2.Instance) (*detachedInstance, error) {
-	detachedInstance := &detachedInstance{
-		*instance,
-		make(map[string]string),
-		"",
-	}
-	var launchTemplateId *string
-	var launchTemplateVersion *string
-	for _, tag := range instance.Tags {
-		detachedInstance.Tags[*tag.Key] = *tag.Value
-		if *tag.Key == "aws:ec2launchtemplate:id" {
-			launchTemplateId = tag.Value
-		} else if *tag.Key == "aws:ec2launchtemplate:version" {
-			launchTemplateVersion = tag.Value
-		}
-	}
-	if launchTemplateId != nil && launchTemplateVersion != nil {
-		launchTemplate := fmt.Sprintf("%v-%v", *launchTemplateId, *launchTemplateVersion)
-		detachedInstance.LaunchVersion = launchTemplate
-	} else {
-		return nil, fmt.Errorf("Could not find launch template for instance: %s", *instance.InstanceId)
-	}
-	return detachedInstance, nil
 }
