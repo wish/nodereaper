@@ -361,14 +361,15 @@ func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*ec2.Inst
 	svcEC2.DescribeInstancesPages(input,
 		func(page *ec2.DescribeInstancesOutput, lastPage bool) bool {
 			for _, res := range page.Reservations {
+			instanceLoop:
 				for _, instance := range res.Instances {
 					// Check that it's not attached to an asg
 					for _, tag := range instance.Tags {
 						if *tag.Key == "aws:autoscaling:groupName" {
-							detachedInstances = append(detachedInstances, instance)
-							break
+							continue instanceLoop
 						}
 					}
+					detachedInstances = append(detachedInstances, instance)
 				}
 			}
 			return true
