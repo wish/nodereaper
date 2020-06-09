@@ -349,6 +349,13 @@ func getDetachedInstances(svcEC2 *ec2.EC2, filter map[string]string) []*ec2.Inst
 		Filters: []*ec2.Filter{},
 	}
 
+	input.Filters = append(input.Filters, &ec2.Filter{
+		Name: aws.String("instance-state-name"),
+		Values: []*string{
+			aws.String("running"),
+		},
+	})
+
 	for fkey, fvalue := range filter {
 		input.Filters = append(input.Filters, &ec2.Filter{
 			Name: aws.String(fmt.Sprintf("tag:%s", fkey)),
