@@ -100,11 +100,12 @@ func drainNode(opts *ops, clientset *kubernetes.Clientset) error {
 	err = drain.Drain(clientset, []*core_v1.Node{
 		node,
 	}, &drain.DrainOptions{
-		Force:            true,
-		IgnoreDaemonsets: true,
-		Timeout:          2 * time.Minute,
-		DeleteLocalData:  true,
-		Logger:           &wrappedLogger{logrus.StandardLogger()},
+		Force:              true,
+		IgnoreDaemonsets:   true,
+		GracePeriodSeconds: -1, // set to negative to allow for default pod grace periods
+		Timeout:            2 * time.Minute,
+		DeleteLocalData:    true,
+		Logger:             &wrappedLogger{logrus.StandardLogger()},
 	})
 	if err != nil {
 		return fmt.Errorf("Error draining pods from node %v: %v", opts.NodeName, err)
