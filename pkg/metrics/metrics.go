@@ -46,6 +46,7 @@ type Node struct {
 type GroupState struct {
 	GroupName   string
 	WantedNodes int
+	RemainingNodesToDelete int
 	Nodes       []Node
 }
 
@@ -80,18 +81,28 @@ func (m *Reporter) generateMetrics() []*dto.MetricFamily {
 	}
 
 	desiredFamily := generateGaugeFamily("nodereaper_instance_group_desired_size", "Desired number of nodes in the instance group")
+	remainingFamily := generateGaugeFamily("nodereaper_instance_group_remaining_to_delete", "Remaining number of nodes to delete")
 	statesFamily := generateGaugeFamily("nodereaper_instance_group_state", "The number of nodes in a particular state of deletion")
 
 	for groupName, group := range m.info {
 		groupKey := "group"
 		groupVal := groupName
 		desired := float64(group.WantedNodes)
+		remaining := float64(group.RemainingNodesToDelete)
 
 		desiredFamily.Metric = append(desiredFamily.Metric, &dto.Metric{
 			Label: []*dto.LabelPair{
 				&dto.LabelPair{Name: &groupKey, Value: &groupVal},
 			},
 			Gauge:       &dto.Gauge{Value: &desired},
+			TimestampMs: &timeMs,
+		})
+
+		remainingFamily.Metric = append(remainingFamily.Metric, &dto.Metric{
+			Label: []*dto.LabelPair{
+				&dto.LabelPair{Name: &groupKey, Value: &groupVal},
+			},
+			Gauge:       &dto.Gauge{Value: &remaining},
 			TimestampMs: &timeMs,
 		})
 
@@ -138,6 +149,9 @@ func (m *Reporter) generateMetrics() []*dto.MetricFamily {
 	out := []*dto.MetricFamily{}
 	if len(desiredFamily.Metric) > 0 {
 		out = append(out, desiredFamily)
+	}
+	if len(remainingFamily.Metric) > 0 {
+		out = append(out, remainingFamily)
 	}
 	if len(statesFamily.Metric) > 0 {
 		out = append(out, statesFamily)

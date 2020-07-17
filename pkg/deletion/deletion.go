@@ -413,6 +413,7 @@ func (d *Deleter) recordMetrics() {
 		g := metrics.GroupState{
 			GroupName:   group.Name,
 			WantedNodes: group.NumDesired,
+			RemainingNodesToDelete: group.stateCount(WantDelete, Detached, ReadyToDelete, Deleting),
 			Nodes:       nodes,
 		}
 		groupStates[g.GroupName] = g
