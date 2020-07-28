@@ -27,10 +27,11 @@ const (
 )
 
 type ops struct {
-	NodeName      string `long:"node-name" env:"NODE_NAME" description:"The name of the host node" required:"yes"`
-	LogLevel      string `long:"log-level" env:"LOG_LEVEL" description:"Log level" default:"info"`
-	DeletionLabel string `long:"force-deletion-label" env:"FORCE_DELETION_LABEL" description:"Delete this node if it has this label"`
-	DryRun        bool   `long:"dry-run" env:"DRY_RUN" description:"Don't actually perform deletions if true"`
+	NodeName      string        `long:"node-name" env:"NODE_NAME" description:"The name of the host node" required:"yes"`
+	LogLevel      string        `long:"log-level" env:"LOG_LEVEL" description:"Log level" default:"info"`
+	DeletionLabel string        `long:"force-deletion-label" env:"FORCE_DELETION_LABEL" description:"Delete this node if it has this label"`
+	DryRun        bool          `long:"dry-run" env:"DRY_RUN" description:"Don't actually perform deletions if true"`
+	DrainTimeout  time.Duration `long:"drain-timeout" env:"DRAIN_TIMEOUT" description:"duration to wait for a drain to complete before retrying" default:"2m"`
 }
 
 type wrappedLogger struct {
@@ -103,7 +104,7 @@ func drainNode(opts *ops, clientset *kubernetes.Clientset) error {
 		Force:              true,
 		IgnoreDaemonsets:   true,
 		GracePeriodSeconds: -1, // set to negative to allow for default pod grace periods
-		Timeout:            2 * time.Minute,
+		Timeout:            opts.DrainTimeout,
 		DeleteLocalData:    true,
 		Logger:             &wrappedLogger{logrus.StandardLogger()},
 	})
