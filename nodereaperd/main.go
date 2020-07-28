@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	drain "github.com/openshift/kubernetes-drain"
+	"github.com/openshift/cluster-api/pkg/drain"
 	"github.com/wish/nodereaper/pkg/controller"
 
 	flags "github.com/jessevdk/go-flags"
