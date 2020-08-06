@@ -3,7 +3,7 @@ module github.com/wish/nodereaper
 go 1.12
 
 require (
-	github.com/aws/aws-sdk-go v1.23.10
+	github.com/aws/aws-sdk-go v1.23.13
 	github.com/go-log/log v0.1.1-0.20181211034820-a514cf01a3eb // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7 // indirect
