@@ -30,7 +30,7 @@ Flag | Environment Variable | Type | Default | Required | Description
 `node-name` | `NODE_NAME` | `string` |  | yes | The name of the host node.
 `log-level` | `LOG_LEVEL` | `string` | `info` | no | The level of log detail.
 `bind-address` | `BIND_ADDRESS` | `string` | `:9656` | no | The address for binding metrics listener.
-`poll-period` | `POLL_PERIOD` | `time.Duration` | `15s` | no |  How often to check for deletion.
+`poll-period` | `POLL_PERIOD` | `time.Duration` | `15s` | no | How often to check for deletion.
 `namespace` | `NAMESPACE` | `string` | | yes | The namespace the controller resides in.
 `lock-configmap-name` | `LOCK_CONFIGMAP_NAME` | `string` | `nodereaper-locks` | no | The controller will store state in a configmap named `$NAMESPACE/$LOCK_CONFIGMAP_NAME`.
 `instance-group-label` | `INSTANCE_GROUP_LABEL` | `string` | | yes | The k8s label that specifies the group of the node.
