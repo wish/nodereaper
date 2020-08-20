@@ -31,7 +31,7 @@ type APIProvider struct {
 
 // NewAPIProvider creates an AWS api instance
 func NewAPIProvider(pollPeriod time.Duration, filters map[string]string, nameTag string) (*APIProvider, error) {
-	sess := session.New()
+	sess := session.Must(session.NewSession())
 	provider := &APIProvider{
 		client:                    autoscaling.New(sess),
 		ec2Client:                 ec2.New(sess),
