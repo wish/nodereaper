@@ -199,8 +199,14 @@ func (d *Deleter) killMyselfFirst() bool {
 	if err != nil || myNode == nil {
 		return true
 	}
+	groupKey := d.nodeGroupKey(myNode)
+	//sometimes the k8s api does not return own node in list node right on creation so the map might have not been populated yet.
+	if d.states.Groups[groupKey] == nil || d.states.Groups[groupKey].Nodes[myNode.Name] == nil{
+		logrus.Infof("Own node %v not found, skipping... ",d.opts.NodeName)
+		return false
+	}
 	// Keep going if we're already deleting
-	if d.states.Groups[d.nodeGroupKey(myNode)].Nodes[myNode.Name].State != DontWantDelete {
+	if d.states.Groups[groupKey].Nodes[myNode.Name].State != DontWantDelete {
 		return true
 	}
 	// Don't delete if we wouldn't want to
