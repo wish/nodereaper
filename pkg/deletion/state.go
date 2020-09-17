@@ -32,7 +32,7 @@ type NodeState struct {
 	NeverDelete bool   `json:"-"`
 }
 
-func (n *NodeState) changeState(newState State, f StateTransitionFunction) {
+func (n *NodeState) changeState(newState State, f StateTransitionFunction) bool {
 	yes, err := f(n.Name, n.State, newState)
 	if yes {
 		logrus.Infof("Successfully changed state of %v from %v to %v", n.Name, n.State, newState)
@@ -40,6 +40,7 @@ func (n *NodeState) changeState(newState State, f StateTransitionFunction) {
 	} else if err != nil {
 		logrus.Errorf("Failed to change state of %v from %v to %v: %v", n.Name, n.State, newState, err)
 	}
+	return yes
 }
 
 // Group represents the deletion states and settings for a single group
@@ -131,28 +132,27 @@ func (g *Group) Advance(f StateTransitionFunction) {
 	numBeingDeleted := g.stateCount(ReadyToDelete, Deleting)
 	numNotBeingDeleted := totalNumberOfNodes - numBeingDeleted
 	numCanBeDeleted := numNotBeingDeleted - g.NumDesired + g.MaxUnavailable
-	if numCanBeDeleted < 0 {
-		numCanBeDeleted = 0
-	}
+	// Detached -> ReadyToDelete
 	for _, node := range g.iterateNodes() {
-		if numCanBeDeleted == 0 {
+		if numCanBeDeleted <= 0 {
 			break
 		}
-		if node.State != Detached {
-			continue
+		if node.State == Detached {
+			if ok := node.changeState(ReadyToDelete, f); ok {
+				numCanBeDeleted--
+			}
 		}
-		node.changeState(ReadyToDelete, f)
-		numCanBeDeleted--
 	}
+	// WantDelete -> ReadyToDelete
 	for _, node := range g.iterateNodes() {
-		if numCanBeDeleted == 0 {
+		if numCanBeDeleted <= 0 {
 			break
 		}
-		if node.State != WantDelete {
-			continue
+		if node.State == WantDelete {
+			if ok := node.changeState(ReadyToDelete, f); ok {
+				numCanBeDeleted--
+			}
 		}
-		node.changeState(ReadyToDelete, f)
-		numCanBeDeleted--
 	}
 
 	// Now try to move as many nodes as possible from ReadyToDelete -> Deleting
@@ -172,11 +172,11 @@ func (g *Group) Advance(f StateTransitionFunction) {
 			break
 		}
 		if node.State == WantDelete {
-			node.changeState(Detached, f)
-			numCanBeDetached--
+			if ok := node.changeState(Detached, f); ok {
+				numCanBeDetached--
+			}
 		}
 	}
-
 }
 
 // Advance tries to advance deletion for all groups, in parallel
