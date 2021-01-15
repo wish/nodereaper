@@ -72,6 +72,10 @@ func (d *APIProvider) sync() {
 				} else if instance.LaunchTemplate != nil {
 					launchTemplate := fmt.Sprintf("%v-%v", *instance.LaunchTemplate.LaunchTemplateId, *instance.LaunchTemplate.Version)
 					d.nodeInstanceConfiguration[*instance.InstanceId] = &launchTemplate
+				} else {
+					// In this case, the launch config/template is so old it literally doesn't exist
+					// so we know that it's outdated
+					d.nodeInstanceConfiguration[*instance.InstanceId] = nil
 				}
 			}
 		}
