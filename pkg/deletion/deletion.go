@@ -22,6 +22,8 @@ import (
 )
 
 const (
+	// node label to identify whether a node has cron jobs (true/false)
+	isCronLabel = "kops.k8s.io/is-cron"
 	k8sRoleLabel = "kubernetes.io/role"
 )
 
@@ -111,10 +113,13 @@ func (d *Deleter) pollDeletions() {
 			if groupKey == "___master___" {
 				desired = 3
 			}
+
+			isCron, found := node.Labels[isCronLabel]
 			d.states.Groups[groupKey] = &Group{
 				Name:           node.Labels[d.opts.InstanceGroupLabel],
 				Key:            groupKey,
 				IsReal:         groupKey == "___ig___"+node.Labels[d.opts.InstanceGroupLabel],
+				IsCron:         found && isCron == "true",
 				MaxSurge:       1,
 				MaxUnavailable: 0,
 				NumDesired:     desired,
@@ -272,7 +277,7 @@ func (d *Deleter) StateTransitionFunction(nodeName string, oldState, newState St
 	}
 
 	// Try actually deleting the node
-	if oldState == ReadyToDelete && newState == Deleting {
+	if oldState == ReadyToDelete && (newState == TryDeleting || newState == Deleting) {
 		err := d.provider.PreDrain(d.opts, node)
 		if err != nil {
 			return false, err

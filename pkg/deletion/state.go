@@ -21,6 +21,8 @@ const (
 	Detached State = "detached"
 	// ReadyToDelete means the controller is ready to actually begin deleting a node
 	ReadyToDelete State = "ready_to_delete"
+	// TryDeleting means the controller has instructed nodereaperd to delete the node, but may take long as the node has cron jobs
+	TryDeleting State = "try_deleting"
 	// Deleting means the controller has instructed nodereaperd to delete the node
 	Deleting State = "deleting"
 )
@@ -48,6 +50,7 @@ type Group struct {
 	Name           string
 	Key            string
 	IsReal         bool
+	IsCron         bool
 	MaxSurge       int
 	MaxUnavailable int
 	NumDesired     int
@@ -129,7 +132,7 @@ func (g *Group) Advance(f StateTransitionFunction) {
 
 	// First attempt to move as many nodes as possible from Detached -> ReadyToDelete and then WantDelete -> ReadyToDelete
 	totalNumberOfNodes := g.size()
-	numBeingDeleted := g.stateCount(ReadyToDelete, Deleting)
+	numBeingDeleted := g.stateCount(ReadyToDelete, TryDeleting, Deleting)
 	numNotBeingDeleted := totalNumberOfNodes - numBeingDeleted
 	numCanBeDeleted := numNotBeingDeleted - g.NumDesired + g.MaxUnavailable
 	// Detached -> ReadyToDelete
@@ -155,15 +158,19 @@ func (g *Group) Advance(f StateTransitionFunction) {
 		}
 	}
 
-	// Now try to move as many nodes as possible from ReadyToDelete -> Deleting
+	// Now try to move as many nodes as possible from ReadyToDelete -> TryDeleting/Deleting
 	for _, node := range g.iterateNodes() {
 		if node.State == ReadyToDelete {
-			node.changeState(Deleting, f)
+			if g.IsCron {
+				node.changeState(TryDeleting, f)
+			} else {
+				node.changeState(Deleting, f)
+			}
 		}
 	}
 
 	// Now try to move as many nodes as possible from WantDelete -> Detached
-	numCanBeDetached := g.MaxSurge - g.stateCount(Detached, ReadyToDelete, Deleting)
+	numCanBeDetached := g.MaxSurge - g.stateCount(Detached, ReadyToDelete, TryDeleting, Deleting)
 	if numCanBeDetached < 0 {
 		numCanBeDetached = 0
 	}
@@ -195,7 +202,7 @@ func (gs *GroupStates) Advance(f StateTransitionFunction) {
 // Debug outputs some quick stats about each groups' state
 func (gs *GroupStates) Debug() {
 	for groupKey, group := range gs.Groups {
-		logrus.Debugf("Group: %v, name %v, isReal %v, desires %v, has %v", groupKey, group.Name, group.IsReal, group.NumDesired, group.size())
+		logrus.Debugf("Group: %v, name %v, isReal %v, isCron %v, desires %v, has %v", groupKey, group.Name, group.IsReal, group.IsCron, group.NumDesired, group.size())
 		for nodeName, node := range group.Nodes {
 			logrus.Debugf("      %v: %v", nodeName, node.State)
 		}
