@@ -14,6 +14,9 @@ import (
 const (
 	contentTypeHeader     = "Content-Type"
 	contentEncodingHeader = "Content-Encoding"
+	// VeryHighFalseDesiredSize : If the actual desired size is unknown, set it to this
+	// and the desired_size metric will not be output for the group
+	VeryHighFalseDesiredSize = 9999999999
 )
 
 // Reason represents a reason that the controller would want to delete a node
@@ -85,15 +88,17 @@ func (m *Reporter) generateMetrics() []*dto.MetricFamily {
 	for groupName, group := range m.info {
 		groupKey := "group"
 		groupVal := groupName
-		desired := float64(group.WantedNodes)
 
-		desiredFamily.Metric = append(desiredFamily.Metric, &dto.Metric{
-			Label: []*dto.LabelPair{
-				&dto.LabelPair{Name: &groupKey, Value: &groupVal},
-			},
-			Gauge:       &dto.Gauge{Value: &desired},
-			TimestampMs: &timeMs,
-		})
+		if group.WantedNodes != VeryHighFalseDesiredSize {
+			desired := float64(group.WantedNodes)
+			desiredFamily.Metric = append(desiredFamily.Metric, &dto.Metric{
+				Label: []*dto.LabelPair{
+					&dto.LabelPair{Name: &groupKey, Value: &groupVal},
+				},
+				Gauge:       &dto.Gauge{Value: &desired},
+				TimestampMs: &timeMs,
+			})
+		}
 
 		stateReasonCounts := map[string]map[Reason]int{}
 		for _, node := range group.Nodes {

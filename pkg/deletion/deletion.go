@@ -107,7 +107,7 @@ func (d *Deleter) pollDeletions() {
 		groupKey := d.nodeGroupKey(node)
 		allNodeNames[node.Name] = struct{}{}
 		if _, ok := d.states.Groups[groupKey]; !ok {
-			desired := 9999999999
+			desired := metrics.VeryHighFalseDesiredSize
 			if groupKey == "___master___" {
 				desired = 3
 			}
@@ -146,6 +146,7 @@ func (d *Deleter) pollDeletions() {
 
 			group.MaxSurge = percentOrNumToNum(d.opts.GetString(group.Name, "maxSurge"), group.NumDesired, true)
 			group.MaxUnavailable = percentOrNumToNum(d.opts.GetString(group.Name, "maxUnavailable"), group.NumDesired, false)
+			group.DeletionSchedule = d.opts.GetSchedule(group.Name, "deletionSchedule")
 		}
 
 		for nodeName, node := range group.Nodes {
@@ -201,8 +202,8 @@ func (d *Deleter) killMyselfFirst() bool {
 	}
 	groupKey := d.nodeGroupKey(myNode)
 	//sometimes the k8s api does not return own node in list node right on creation so the map might have not been populated yet.
-	if d.states.Groups[groupKey] == nil || d.states.Groups[groupKey].Nodes[myNode.Name] == nil{
-		logrus.Infof("Own node %v not found, skipping... ",d.opts.NodeName)
+	if d.states.Groups[groupKey] == nil || d.states.Groups[groupKey].Nodes[myNode.Name] == nil {
+		logrus.Infof("Own node %v not found, skipping... ", d.opts.NodeName)
 		return false
 	}
 	// Keep going if we're already deleting

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/wish/nodereaper/pkg/cron"
 )
 
 var defaults map[string]string = map[string]string{
@@ -16,6 +17,7 @@ var defaults map[string]string = map[string]string{
 	"deleteOldLaunchConfig": "false",
 	"deletionAge":           "",
 	"deletionAgeJitter":     "",
+	"deletionSchedule":      "",
 	"startupGracePeriod":    "",
 	"ignoreSelector":        "kubernetes.io/role=master",
 	"ignore":                "false",
@@ -145,6 +147,23 @@ func (c *DynamicConfig) GetDuration(groupName, key string) *time.Duration {
 	panic("No default exists for setting " + key)
 }
 
+func (c *DynamicConfig) GetSchedule(groupName, key string) *cron.Schedule {
+	if groupSettings, ok := c.settings[groupName]; ok {
+		if setting, ok := groupSettings[key]; ok {
+			return parseSchedule(setting)
+		}
+	}
+	if globalSettings, ok := c.settings[""]; ok {
+		if setting, ok := globalSettings[key]; ok {
+			return parseSchedule(setting)
+		}
+	}
+	if defaultSetting, ok := defaults[key]; ok {
+		return parseSchedule(defaultSetting)
+	}
+	panic("No default exists for setting " + key)
+}
+
 func parseBool(s string) bool {
 	if s == "true" {
 		return true
@@ -163,4 +182,15 @@ func parseDuration(s string) *time.Duration {
 		panic(fmt.Sprintf("Duration %v is not valid: %v", s, err))
 	}
 	return &d
+}
+
+func parseSchedule(s string) *cron.Schedule {
+	if s == "" {
+		return nil
+	}
+	p, err := cron.ParseStandard(s)
+	if err != nil {
+		panic(fmt.Sprintf("Schedule %v is not valid: %v", s, err))
+	}
+	return p
 }
