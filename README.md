@@ -53,6 +53,7 @@ Setting Name | Type | Default | Description
 `deleteOldLaunchConfig` | `bool` | `false` | Whether to delete nodes with a different Launch Configuration than their group. With this set, `nodereaper` can perform the function of `kops rolling-update cluster` automatically after a change to configuration is made.
 `deletionAge` | `*time.Duration` | `nil` | If set, the controller will delete any node older than this value.
 `deletionAgeJitter` | `*time.Duration` | `nil` | If this is set, along with `deletionAge`, the controller will randomly delete nodes when their age is somewhere between `deletionAge` and `deletionAge + deletionAgeJitter`.
+`deletionSchedule` | `*cron.Schedule` | `nil` | A crontab schedule defining when, in UTC (**not local time!**), nodes can be deleted (ex. `weekends from 6 to 8 pm` -> `* 18-20 * * 0,6`)
 `startupGracePeriod` | `*time.Duration` | `nil` | Ignore nodes newer than this. Useful to allow time for new nodes to become `Ready`, schedule pods, etc before terminating more.
 `ignoreSelector` | `string` | `kubernetes.io/role=master` | Ignore any node that matches this label selector. Ignored nodes still count towards group size, but they will never be deleted.
 `ignore` | `bool` | `false` | Ignore every single node in the group (if specified per-group), or ignore every node in the cluster (if specified globally).

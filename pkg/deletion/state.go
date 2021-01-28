@@ -2,8 +2,10 @@ package deletion
 
 import (
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
+	"github.com/wish/nodereaper/pkg/cron"
 )
 
 // StateTransitionFunction attempts to move a node from oldState to newState
@@ -45,14 +47,15 @@ func (n *NodeState) changeState(newState State, f StateTransitionFunction) bool 
 
 // Group represents the deletion states and settings for a single group
 type Group struct {
-	Name           string
-	Key            string
-	IsReal         bool
-	MaxSurge       int
-	MaxUnavailable int
-	NumDesired     int
-	Nodes          map[string]*NodeState
-	PriorityNodes  map[string]struct{}
+	Name             string
+	Key              string
+	IsReal           bool
+	MaxSurge         int
+	MaxUnavailable   int
+	DeletionSchedule *cron.Schedule
+	NumDesired       int
+	Nodes            map[string]*NodeState
+	PriorityNodes    map[string]struct{}
 }
 
 // GroupStates represents a set of state machines describing the progress in deleting nodes
@@ -132,6 +135,15 @@ func (g *Group) Advance(f StateTransitionFunction) {
 	numBeingDeleted := g.stateCount(ReadyToDelete, Deleting)
 	numNotBeingDeleted := totalNumberOfNodes - numBeingDeleted
 	numCanBeDeleted := numNotBeingDeleted - g.NumDesired + g.MaxUnavailable
+
+	// If a deletionSchedule was specified, make sure that we are in an allowed time before
+	// moving any nodes in WantDelete into the deletion process
+	scheduleAllowsDeletion := g.DeletionSchedule == nil || g.DeletionSchedule.Matches(time.Now().In(time.UTC))
+	if !scheduleAllowsDeletion && g.stateCount(WantDelete) > 0 {
+		logrus.Debugf("Group %s can't delete because of crontab", g.Name)
+		logrus.Tracef("Spec: %s, current time %v", g.DeletionSchedule.Source(), time.Now().In(time.UTC))
+	}
+
 	// Detached -> ReadyToDelete
 	for _, node := range g.iterateNodes() {
 		if numCanBeDeleted <= 0 {
@@ -143,14 +155,17 @@ func (g *Group) Advance(f StateTransitionFunction) {
 			}
 		}
 	}
+
 	// WantDelete -> ReadyToDelete
-	for _, node := range g.iterateNodes() {
-		if numCanBeDeleted <= 0 {
-			break
-		}
-		if node.State == WantDelete {
-			if ok := node.changeState(ReadyToDelete, f); ok {
-				numCanBeDeleted--
+	if scheduleAllowsDeletion {
+		for _, node := range g.iterateNodes() {
+			if numCanBeDeleted <= 0 {
+				break
+			}
+			if node.State == WantDelete {
+				if ok := node.changeState(ReadyToDelete, f); ok {
+					numCanBeDeleted--
+				}
 			}
 		}
 	}
@@ -163,17 +178,19 @@ func (g *Group) Advance(f StateTransitionFunction) {
 	}
 
 	// Now try to move as many nodes as possible from WantDelete -> Detached
-	numCanBeDetached := g.MaxSurge - g.stateCount(Detached, ReadyToDelete, Deleting)
-	if numCanBeDetached < 0 {
-		numCanBeDetached = 0
-	}
-	for _, node := range g.iterateNodes() {
-		if numCanBeDetached == 0 {
-			break
+	if scheduleAllowsDeletion {
+		numCanBeDetached := g.MaxSurge - g.stateCount(Detached, ReadyToDelete, Deleting)
+		if numCanBeDetached < 0 {
+			numCanBeDetached = 0
 		}
-		if node.State == WantDelete {
-			if ok := node.changeState(Detached, f); ok {
-				numCanBeDetached--
+		for _, node := range g.iterateNodes() {
+			if numCanBeDetached == 0 {
+				break
+			}
+			if node.State == WantDelete {
+				if ok := node.changeState(Detached, f); ok {
+					numCanBeDetached--
+				}
 			}
 		}
 	}
