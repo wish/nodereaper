@@ -331,6 +331,8 @@ func (d *Deleter) countButNeverDelete(node *core_v1.Node) bool {
 }
 
 // WantToDelete determines whether the controller wants delete the node and returns the reason why if it does
+// The clauses are ordered the way they are for metrics reasons, ie if a node is both too old and has outdated
+// config, we probably want to report the outdated config, rather than the age
 func (d *Deleter) WantToDelete(node *core_v1.Node) (bool, metrics.Reason) {
 	groupName := node.Labels[d.opts.InstanceGroupLabel]
 
@@ -342,6 +344,18 @@ func (d *Deleter) WantToDelete(node *core_v1.Node) (bool, metrics.Reason) {
 				return true, metrics.HasDeletionLabel
 			}
 		}
+	}
+
+	if d.opts.GetBool(groupName, "deleteOldLaunchConfig") {
+		// Delete the node if the API-specific logic thinks we should
+		providerWantsDelete, err := d.provider.OutdatedLaunchConfig(d.opts, node)
+		if err != nil {
+			logrus.Warnf("Error checking if %v has an outdated config: %v", node.Name, err)
+		} else if providerWantsDelete {
+			logrus.Tracef("Node %v has a different configuration than its instanceGroup", node.Name)
+			return true, metrics.ConfigurationChanged
+		}
+
 	}
 
 	// Delete the node if it is past its maximum age
@@ -361,18 +375,6 @@ func (d *Deleter) WantToDelete(node *core_v1.Node) (bool, metrics.Reason) {
 			logrus.Tracef("Node %v is more than %v old", node.Name, *deletionAge)
 			return true, metrics.TooOld
 		}
-	}
-
-	if d.opts.GetBool(groupName, "deleteOldLaunchConfig") {
-		// Delete the node if the API-specific logic thinks we should
-		providerWantsDelete, err := d.provider.OutdatedLaunchConfig(d.opts, node)
-		if err != nil {
-			logrus.Warnf("Error checking if %v has an outdated config: %v", node.Name, err)
-		} else if providerWantsDelete {
-			logrus.Tracef("Node %v has a different configuration than its instanceGroup", node.Name)
-			return true, metrics.ConfigurationChanged
-		}
-
 	}
 
 	return false, ""
@@ -417,10 +419,16 @@ func (d *Deleter) recordMetrics() {
 			})
 		}
 
+		// We say that deletion is disabled if `.ignore` is true
+		// or the deletion schedule does not allow deletion at this time
+		scheduleAllowsDeletion := group.DeletionSchedule == nil || group.DeletionSchedule.Matches(time.Now().In(time.UTC))
+		deletionEnabled := !d.opts.GetBool(group.Name, "ignore") && scheduleAllowsDeletion
+
 		g := metrics.GroupState{
-			GroupName:   group.Name,
-			WantedNodes: group.NumDesired,
-			Nodes:       nodes,
+			GroupName:       group.Name,
+			WantedNodes:     group.NumDesired,
+			Nodes:           nodes,
+			DeletionEnabled: deletionEnabled,
 		}
 		groupStates[g.GroupName] = g
 	}
