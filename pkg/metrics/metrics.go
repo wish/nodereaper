@@ -47,9 +47,10 @@ type Node struct {
 
 // GroupState represents a group of nodes and their states
 type GroupState struct {
-	GroupName   string
-	WantedNodes int
-	Nodes       []Node
+	GroupName       string
+	WantedNodes     int
+	DeletionEnabled bool
+	Nodes           []Node
 }
 
 // New returns a new metrics reporter
@@ -84,10 +85,24 @@ func (m *Reporter) generateMetrics() []*dto.MetricFamily {
 
 	desiredFamily := generateGaugeFamily("nodereaper_instance_group_desired_size", "Desired number of nodes in the instance group")
 	statesFamily := generateGaugeFamily("nodereaper_instance_group_state", "The number of nodes in a particular state of deletion")
+	enabledFamily := generateGaugeFamily("nodereaper_instance_group_deletion_enabled", "1 if nodereaper is allowed to delete nodes in this group, 0 otherwise")
 
 	for groupName, group := range m.info {
 		groupKey := "group"
 		groupVal := groupName
+
+		// deletion enabled -> 1, deletion disabled -> 0
+		enabledVal := 0.0
+		if group.DeletionEnabled {
+			enabledVal = 1.0
+		}
+		enabledFamily.Metric = append(enabledFamily.Metric, &dto.Metric{
+			Label: []*dto.LabelPair{
+				&dto.LabelPair{Name: &groupKey, Value: &groupVal},
+			},
+			Gauge:       &dto.Gauge{Value: &enabledVal},
+			TimestampMs: &timeMs,
+		})
 
 		if group.WantedNodes != VeryHighFalseDesiredSize {
 			desired := float64(group.WantedNodes)
@@ -146,6 +161,9 @@ func (m *Reporter) generateMetrics() []*dto.MetricFamily {
 	}
 	if len(statesFamily.Metric) > 0 {
 		out = append(out, statesFamily)
+	}
+	if len(enabledFamily.Metric) > 0 {
+		out = append(out, enabledFamily)
 	}
 
 	return out
