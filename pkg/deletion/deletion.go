@@ -129,8 +129,9 @@ func (d *Deleter) pollDeletions() {
 				state = oldState.State
 			}
 			d.states.Groups[groupKey].Nodes[node.Name] = &NodeState{
-				Name:  node.Name,
-				State: state,
+				Name:         node.Name,
+				State:        state,
+				CreationTime: node.CreationTimestamp,
 			}
 		}
 	}
