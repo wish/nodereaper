@@ -1,8 +1,11 @@
 package deletion
 
 import (
+	"sort"
 	"sync"
 	"time"
+
+	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/sirupsen/logrus"
 	"github.com/wish/nodereaper/pkg/cron"
@@ -29,9 +32,10 @@ const (
 
 // NodeState represents the state of deletion for a single node
 type NodeState struct {
-	Name        string `json:"-"`
-	State       State  `json:"state"`
-	NeverDelete bool   `json:"-"`
+	Name         string       `json:"-"`
+	State        State        `json:"state"`
+	CreationTime meta_v1.Time `json:"-"`
+	NeverDelete  bool         `json:"-"`
 }
 
 func (n *NodeState) changeState(newState State, f StateTransitionFunction) bool {
@@ -118,6 +122,13 @@ func (g *Group) iterateNodes() []*NodeState {
 			}
 		}
 	}
+
+	// Sort the nodes by creationTime ascending, so that we always
+	// go for the oldest nodes first
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].CreationTime.Before(&ret[j].CreationTime)
+	})
+
 	return ret
 }
 
