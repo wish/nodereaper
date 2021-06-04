@@ -286,24 +286,34 @@ func getAsgs(svc *autoscaling.AutoScaling, svcEC2 *ec2.EC2, filter map[string]st
 
 	canonicalLaunchTemps := make(map[string]string)
 	if len(launchTempIds) > 0 {
-		err = svcEC2.DescribeLaunchTemplatesPages(&ec2.DescribeLaunchTemplatesInput{
-			LaunchTemplateIds: launchTempIds,
-		}, func(page *ec2.DescribeLaunchTemplatesOutput, lastPage bool) bool {
-			for _, launchTemplate := range page.LaunchTemplates {
-				if launchTemplate.LaunchTemplateId == nil {
-					return false
-				}
-				if launchTemplate.DefaultVersionNumber == nil {
-					return false
-				}
-
-				id := *launchTemplate.LaunchTemplateId
-				canonicalLaunchTemps[id] = fmt.Sprintf("%v-%v", id, *launchTemplate.DefaultVersionNumber)
+		// DescribeLaunchTemplates limited to querying 200 at a time, so chunk the IDs
+		chunkSize := 200
+		for i := 0; i < len(launchTempIds); i += chunkSize {
+			end := i + chunkSize
+			if end > len(launchTempIds) {
+				end = len(launchTempIds)
 			}
-			return true
-		})
-		if err != nil {
-			return nil, err
+			chunkedLaunchTempIds := launchTempIds[i:end]
+
+			err = svcEC2.DescribeLaunchTemplatesPages(&ec2.DescribeLaunchTemplatesInput{
+				LaunchTemplateIds: chunkedLaunchTempIds,
+			}, func(page *ec2.DescribeLaunchTemplatesOutput, lastPage bool) bool {
+				for _, launchTemplate := range page.LaunchTemplates {
+					if launchTemplate.LaunchTemplateId == nil {
+						return false
+					}
+					if launchTemplate.DefaultVersionNumber == nil {
+						return false
+					}
+
+					id := *launchTemplate.LaunchTemplateId
+					canonicalLaunchTemps[id] = fmt.Sprintf("%v-%v", id, *launchTemplate.DefaultVersionNumber)
+				}
+				return true
+			})
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
