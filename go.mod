@@ -10,7 +10,7 @@ require (
 	github.com/prometheus/client_model v0.0.0-20190115171406-56726106282f
 	github.com/prometheus/common v0.1.0
 	github.com/sirupsen/logrus v1.4.2
-	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586 // indirect
+	golang.org/x/crypto v0.17.0 // indirect
 	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
 	k8s.io/api v0.17.3
 	k8s.io/apimachinery v0.17.3
