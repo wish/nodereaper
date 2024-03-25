@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.15
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine3.19
 
 ARG BUILDPLATFORM
 ARG TARGETARCH
@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} GOOS=${TARGETOS} go build -o ./nodereaper
 # Build daemon
 RUN CGO_ENABLED=0 GOARCH=${TARGETARCH} GOOS=${TARGETOS} go build -o ./nodereaperd/nodereaperd -a -installsuffix cgo ./nodereaperd
 
-FROM alpine:3.13
+FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 COPY --from=0 /go/src/github.com/wish/nodereaper/nodereaper/nodereaper /root/nodereaper

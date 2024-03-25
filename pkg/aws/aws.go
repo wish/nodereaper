@@ -164,19 +164,22 @@ func (d *APIProvider) PreDrain(opts *config.Ops, node *core_v1.Node) error {
 		return fmt.Errorf("Could not find ASG for node %v", node.Name)
 	}
 
-	// Make sure that when nodereaperd shuts down the node, it is actually terminated
-	// as opposed to just stopped
-	behavior := "terminate"
-	_, err = d.ec2Client.ModifyInstanceAttribute(&ec2.ModifyInstanceAttributeInput{
-		InstanceId: &id,
-		InstanceInitiatedShutdownBehavior: &ec2.AttributeValue{
-			Value: &behavior,
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("Error setting shutdown behaviour for node %v (%v): %v", node.Name, id, err)
+	// Spot instances default to terminate on stop and trying to set the shutdown behaviour causes an error.
+	if node.Labels["node-role.kubernetes.io/spot-worker"] != "true" {
+		// Make sure that when nodereaperd shuts down the node, it is actually terminated
+		// as opposed to just stopped
+		behavior := "terminate"
+		_, err = d.ec2Client.ModifyInstanceAttribute(&ec2.ModifyInstanceAttributeInput{
+			InstanceId: &id,
+			InstanceInitiatedShutdownBehavior: &ec2.AttributeValue{
+				Value: &behavior,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("Error setting shutdown behaviour for node %v (%v): %v", node.Name, id, err)
+		}
+		logrus.Infof("Set shutdown behaviour for %v", node.Name)
 	}
-	logrus.Infof("Set shutdown behaviour for %v", node.Name)
 	return nil
 }
 
