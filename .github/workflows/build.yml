@@ -13,12 +13,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Log in to quay.io
-        uses: azure/docker-login@v1
+      - name: Login to Quay.io
+        uses: docker/login-action@v3
         with:
-          login-server: quay.io
-          username: '${{ secrets.QUAYIO_USERNAME }}'
-          password: '${{ secrets.QUAYIO_PASSWORD }}'
+          registry: quay.io
+          username: '${{ secrets.NODEREAPER_QUAYIO_USERNAME }}'
+          password: '${{ secrets.NODEREAPER_QUAYIO_PASSWORD }}'
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
